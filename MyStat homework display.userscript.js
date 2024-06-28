@@ -3,14 +3,16 @@
 // @namespace   Violentmonkey Scripts
 // @match       https://mystat.itstep.org/*
 // @grant       none
-// @version     1.1
+// @version     1.2
 // @author      regularuser548
 // @description Скрипт который отображает текстовые дз прямо в Майстате
 // @license     MIT
 // ==/UserScript==
 
-const modalHTML = '<button class="float-right" id="modalCloseBtn">X</button> <p></p>';
+const modalHTML = '<button class="float-right btn btn-danger" id="modalCloseBtn">X</button> <p></p>';
+const pdfModalHTML = '<button class="float-right btn btn-danger" id="modalCloseBtn">X</button> <embed />';
 
+let fileMIMEType = '';
 
 document.addEventListener('click', clickHandler);
 
@@ -35,11 +37,12 @@ function displayFile(event) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
 
-            let contentType = response.headers.get("Content-Type").split(";")[0];
+            fileMIMEType = response.headers.get("Content-Type").split(";")[0];
 
 
-            if (contentType == 'text/plain')
+            if (fileMIMEType == 'text/plain' || fileMIMEType == 'application/pdf')
                 downloadFile(link);
+
             else
                 link.click();
 
@@ -54,30 +57,66 @@ function downloadFile(link) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
 
-            return response.text();
+            if (fileMIMEType == 'application/pdf')
+                return response.blob();
+            else
+                return response.text();
 
         })
         .then((content) => {
-            displayModal(content.trim());
+            displayModal(content);
         });
 
 }
 
-function displayModal(text) {
+function displayModal(content) {
     let container = document.querySelector('.homeworks-section');
     let modal = container.querySelector('.customModal');
 
-
+    //create dialog node
     if (modal == null) {
-        //create dialog node
+
         modal = document.createElement('dialog');
-        modal.innerHTML = modalHTML;
+
         modal.classList.add("customModal");
-        modal.querySelector('#modalCloseBtn').onclick = closeDialog;
+
         container.appendChild(modal);
     }
 
-    //update text
-    modal.querySelector('p').innerText = text;
+    //clean old html
+    modal.innerHTML = '';
+
+    //pdf
+    if (fileMIMEType == 'application/pdf') {
+        modal.innerHTML = pdfModalHTML;
+
+        modal.querySelector('#modalCloseBtn').onclick = closeDialog;
+
+        let embed = modal.querySelector('embed');
+
+        embed.type = fileMIMEType;
+
+        //we need to calculate size manually here :)
+        let vh = window.innerHeight / 100;
+        let vw = window.innerWidth / 100;
+
+        embed.height = 85 * vh + 'px';
+        embed.width = 85 * vw + 'px';
+
+        embed.src = URL.createObjectURL(content);
+
+        embed.onload = () => {
+            URL.revokeObjectURL(embed.src);
+        };
+    }
+    //text
+    else {
+
+        modal.innerHTML = modalHTML;
+        modal.querySelector('#modalCloseBtn').onclick = closeDialog;
+        modal.querySelector('p').innerText = content.trim();
+    }
+
+
     modal.showModal();
 }
